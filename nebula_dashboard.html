@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PROJECT NEBULA // TACTICAL INTERFACE</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700&family=Plus+Jakarta+Sans:wght@200;400;800&display=swap');
+        
+        :root {
+            --sky-primary: #38bdf8;
+            --emerald-acc: #10b981;
+            --danger-acc: #ef4444;
+            --bg-base: #020617;
+            --grid-color: rgba(56, 189, 248, 0.05);
+        }
+
+        body { 
+            font-family: 'Plus Jakarta Sans', sans-serif; 
+            background-color: var(--bg-base); 
+            color: #f1f5f9; 
+            overflow: hidden;
+            height: 100vh;
+            background-image: 
+                linear-gradient(var(--grid-color) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+            background-size: 30px 30px;
+        }
+
+        .mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* Industrial HUD Styling */
+        .hud-panel {
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(25px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            clip-path: polygon(0 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%);
+            position: relative;
+        }
+
+        .hud-panel::before {
+            content: '';
+            position: absolute; top: 0; left: 0; width: 10px; height: 10px;
+            border-top: 2px solid var(--sky-primary); border-left: 2px solid var(--sky-primary);
+        }
+
+        .tab-btn {
+            text-transform: uppercase;
+            font-size: 10px;
+            letter-spacing: 0.2em;
+            font-weight: 800;
+            color: #475569;
+            transition: all 0.3s ease;
+            border-bottom: 2px solid transparent;
+        }
+
+        .tab-active {
+            color: var(--sky-primary);
+            border-bottom-color: var(--sky-primary);
+            background: linear-gradient(to top, rgba(56, 189, 248, 0.1), transparent);
+        }
+
+        /* Starfield & Scanline */
+        .stars { position: fixed; inset: 0; z-index: -1; }
+        .star { position: absolute; background: #fff; border-radius: 50%; opacity: 0.2; animation: float var(--d) linear infinite; }
+        @keyframes float { from { transform: translateY(0); } to { transform: translateY(-100vh); } }
+
+        .scan { position: fixed; inset: 0; pointer-events: none; z-index: 50;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02));
+            background-size: 100% 3px, 3px 100%;
+        }
+
+        /* Custom UI Elements */
+        .sc-card {
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            background: rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+        }
+        .sc-card:hover {
+            border-color: var(--sky-primary);
+            background: rgba(56, 189, 248, 0.05);
+            transform: translateX(5px);
+        }
+
+        .btn-industrial {
+            clip-path: polygon(10% 0, 100% 0, 100% 70%, 90% 100%, 0 100%, 0% 30%);
+            transition: all 0.2s ease;
+        }
+
+        .custom-scroll::-webkit-scrollbar { width: 2px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: var(--sky-primary); }
+
+        /* Secret Report Overlay */
+        #secret-modal {
+            background: rgba(2, 6, 23, 0.95);
+            backdrop-filter: blur(10px);
+        }
+    </style>
+</head>
+<body class="flex flex-col p-4 gap-4">
+
+    <div class="stars" id="starfield"></div>
+    <div class="scan"></div>
+
+    <!-- SECRET REPORT MODAL (Logic Addition) -->
+    <div id="secret-modal" class="fixed inset-0 z-[200] hidden flex items-center justify-center p-6">
+        <div class="max-w-md w-full hud-panel p-8 bg-slate-900 border-sky-500/30">
+            <h2 class="mono text-[10px] font-black text-sky-500 mb-6 uppercase tracking-widest border-b border-sky-500/20 pb-2">Classified Asset Report</h2>
+            <div id="report-content" class="mono text-[11px] space-y-3 text-slate-300">
+                <!-- Injected via JS -->
+            </div>
+            <button onclick="document.getElementById('secret-modal').classList.add('hidden')" class="btn-industrial w-full bg-sky-500/10 border border-sky-500/30 text-sky-500 font-black py-3 text-[10px] uppercase tracking-widest mt-8 hover:bg-sky-500/20">Close Archive</button>
+        </div>
+    </div>
+
+    <style>
+        #boot-overlay {
+            background: radial-gradient(ellipse at 50% 60%, rgba(14,30,60,0.98) 0%, #020617 70%);
+        }
+        .boot-ring {
+            position: absolute;
+            border-radius: 50%;
+            border: 1px solid rgba(56,189,248,0.08);
+            animation: ring-pulse 6s ease-in-out infinite;
+        }
+        @keyframes ring-pulse {
+            0%, 100% { opacity: 0.4; transform: scale(1); }
+            50%       { opacity: 0.9; transform: scale(1.03); }
+        }
+        .boot-ring:nth-child(2) { animation-delay: -2s; }
+        .boot-ring:nth-child(3) { animation-delay: -4s; }
+        .nebula-glow {
+            position: absolute;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(56,189,248,0.07) 0%, transparent 70%);
+            pointer-events: none;
+        }
+        .boot-scanline {
+            position: absolute; inset: 0; pointer-events: none;
+            background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(56,189,248,0.012) 3px, rgba(56,189,248,0.012) 4px);
+        }
+        .init-bar {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #38bdf8, transparent);
+            animation: init-sweep 2s ease-in-out infinite;
+        }
+        @keyframes init-sweep {
+            0%   { width: 0%; margin-left: 0; }
+            50%  { width: 70%; margin-left: 15%; }
+            100% { width: 0%; margin-left: 100%; }
+        }
+        .boot-corner { position: absolute; width: 18px; height: 18px; }
+        .boot-corner.tl { top: 0; left: 0; border-top: 1px solid #38bdf8; border-left: 1px solid #38bdf8; }
+        .boot-corner.tr { top: 0; right: 0; border-top: 1px solid #38bdf8; border-right: 1px solid #38bdf8; }
+        .boot-corner.bl { bottom: 0; left: 0; border-bottom: 1px solid #38bdf8; border-left: 1px solid #38bdf8; }
+        .boot-corner.br { bottom: 0; right: 0; border-bottom: 1px solid #38bdf8; border-right: 1px solid #38bdf8; }
+        .boot-input {
+            width: 100%; background: rgba(0,0,0,0.5);
+            border: 1px solid rgba(56,189,248,0.2); padding: 14px 16px;
+            color: #f1f5f9; font-family: 'JetBrains Mono', monospace;
+            font-size: 13px; outline: none; transition: border-color 0.3s;
+            clip-path: polygon(6px 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%);
+        }
+        .boot-input:focus { border-color: rgba(56,189,248,0.7); background: rgba(56,189,248,0.04); }
+        #boot-submit {
+            clip-path: polygon(12px 0%, 100% 0%, calc(100% - 12px) 100%, 0% 100%);
+            background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
+            transition: all 0.25s ease;
+        }
+        #boot-submit:hover { filter: brightness(1.15); transform: scaleX(1.01); }
+        .stat-chip {
+            display: flex; flex-direction: column; align-items: center;
+            padding: 8px 12px;
+            border: 1px solid rgba(56,189,248,0.1);
+            background: rgba(56,189,248,0.03);
+        }
+        .typewriter { overflow: hidden; white-space: nowrap; border-right: 2px solid #38bdf8;
+            animation: typing 1.8s steps(22, end) forwards, blink 0.8s step-end infinite; width: 0; }
+        @keyframes typing  { to { width: 100%; } }
+        @keyframes blink   { 50% { border-color: transparent; } }
+    </style>
+
+    <div id="boot-overlay" class="fixed inset-0 z-[100] flex items-center justify-center p-6 overflow-hidden">
+
+        <!-- Ambient rings -->
+        <div class="boot-ring" style="width:600px;height:600px;top:calc(50% - 300px);left:calc(50% - 300px);animation-duration:7s;"></div>
+        <div class="boot-ring" style="width:900px;height:900px;top:calc(50% - 450px);left:calc(50% - 450px);animation-duration:10s;"></div>
+        <div class="boot-ring" style="width:1200px;height:1200px;top:calc(50% - 600px);left:calc(50% - 600px);animation-duration:14s;"></div>
+
+        <!-- Nebula glow blobs -->
+        <div class="nebula-glow" style="width:700px;height:500px;top:calc(50% - 350px);left:calc(50% - 200px);"></div>
+        <div class="nebula-glow" style="width:400px;height:400px;top:calc(50% - 100px);left:calc(50% - 350px);opacity:0.5;"></div>
+
+        <div class="boot-scanline"></div>
+
+        <!-- Main panel -->
+        <div style="position:relative;max-width:480px;width:100%;background:rgba(8,15,36,0.92);border:1px solid rgba(56,189,248,0.15);padding:48px 40px 40px;">
+            <div class="boot-corner tl"></div>
+            <div class="boot-corner tr"></div>
+            <div class="boot-corner bl"></div>
+            <div class="boot-corner br"></div>
+
+            <!-- Top badge row -->
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:32px;">
+                <div class="mono" style="font-size:8px;color:rgba(56,189,248,0.5);letter-spacing:0.3em;text-transform:uppercase;">SECTOR_7G</div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <div style="width:5px;height:5px;border-radius:50%;background:#10b981;animation:pulse 2s infinite;"></div>
+                    <span class="mono" style="font-size:8px;color:#10b981;letter-spacing:0.25em;">SYS_ONLINE</span>
+                </div>
+            </div>
+
+            <!-- Title block -->
+            <div style="text-align:center;margin-bottom:36px;">
+                <div class="mono" style="font-size:9px;letter-spacing:0.6em;color:rgba(56,189,248,0.6);margin-bottom:10px;text-transform:uppercase;overflow:hidden;">
+                    <span class="typewriter">SYSTEMS_CHECK // OK</span>
+                </div>
+                <div style="position:relative;display:inline-block;">
+                    <h1 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:42px;font-weight:900;font-style:italic;letter-spacing:-2px;color:#fff;line-height:1;margin:0;">PROJECT</h1>
+                    <h1 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:42px;font-weight:900;font-style:italic;letter-spacing:-2px;color:#38bdf8;line-height:1;margin:0;">_NEBULA</h1>
+                </div>
+                <div style="height:1px;background:linear-gradient(90deg,transparent,rgba(56,189,248,0.4),transparent);margin:14px 0;"></div>
+                <div class="mono" style="font-size:9px;color:rgba(148,163,184,0.5);letter-spacing:0.25em;text-transform:uppercase;">DEEP SPACE MISSION CONTROL // v4.2.1</div>
+            </div>
+
+            <!-- Init progress bar -->
+            <div style="position:relative;height:2px;background:rgba(56,189,248,0.06);margin-bottom:28px;overflow:hidden;">
+                <div class="init-bar"></div>
+            </div>
+
+            <!-- Stat chips row -->
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:24px;">
+                <div class="stat-chip mono">
+                    <span style="font-size:7px;color:rgba(148,163,184,0.5);letter-spacing:0.2em;text-transform:uppercase;margin-bottom:4px;">Uplink</span>
+                    <span style="font-size:10px;color:#38bdf8;">14ms</span>
+                </div>
+                <div class="stat-chip mono">
+                    <span style="font-size:7px;color:rgba(148,163,184,0.5);letter-spacing:0.2em;text-transform:uppercase;margin-bottom:4px;">Encrypt</span>
+                    <span style="font-size:10px;color:#10b981;">AES-256</span>
+                </div>
+                <div class="stat-chip mono">
+                    <span style="font-size:7px;color:rgba(148,163,184,0.5);letter-spacing:0.2em;text-transform:uppercase;margin-bottom:4px;">Grid</span>
+                    <span style="font-size:10px;color:#f1f5f9;">NOMINAL</span>
+                </div>
+            </div>
+
+            <!-- Inputs -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+                <div>
+                    <div class="mono" style="font-size:7px;color:rgba(148,163,184,0.5);letter-spacing:0.25em;text-transform:uppercase;margin-bottom:6px;">Hangar Capacity</div>
+                    <input type="number" id="sCap" value="10" class="boot-input">
+                </div>
+                <div>
+                    <div class="mono" style="font-size:7px;color:rgba(148,163,184,0.5);letter-spacing:0.25em;text-transform:uppercase;margin-bottom:6px;">Queue Buffer</div>
+                    <input type="number" id="mCap" value="15" class="boot-input">
+                </div>
+            </div>
+
+            <button id="boot-submit" onclick="initializeStation()" style="width:100%;color:#020617;font-family:'Plus Jakarta Sans',sans-serif;font-weight:900;font-size:11px;letter-spacing:0.4em;text-transform:uppercase;padding:20px;border:none;cursor:pointer;">
+                ESTABLISH STATION LINK
+            </button>
+
+            <!-- Bottom hint -->
+            <div style="text-align:center;margin-top:16px;">
+                <span class="mono" style="font-size:7px;color:rgba(148,163,184,0.25);letter-spacing:0.2em;text-transform:uppercase;">AUTHORIZED PERSONNEL ONLY // CLEARANCE LVL 5</span>
+            </div>
+        </div>
+    </div>
+
+    <header class="h-20 flex shrink-0 items-center justify-between px-8 hud-panel border-white/5">
+        <div class="flex items-center gap-10">
+            <div class="flex flex-col">
+                <span class="text-xs font-black tracking-tighter text-white uppercase italic">Project <span class="text-sky-500">NEBULA</span></span>
+                <span class="text-[9px] mono text-slate-500 uppercase" id="live-clock"></span>
+            </div>
+            <div class="hidden xl:flex gap-8 border-l border-white/10 pl-8">
+                <div class="flex flex-col">
+                    <span class="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Station Integrity</span>
+                    <span class="text-[10px] mono text-emerald-500">100% // NOMINAL</span>
+                </div>
+                <div class="flex flex-col">
+                    <span class="text-[8px] font-bold text-slate-500 uppercase tracking-widest">Sector Status</span>
+                    <span class="text-[10px] mono text-amber-500">CAUTION // ASTEROID DRIFT</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="flex gap-8 items-center">
+            <div class="flex flex-col items-end">
+                <span class="text-[8px] font-bold text-slate-500 uppercase">Registered Assets</span>
+                <span id="stat-fleet" class="text-xs mono font-bold text-white tracking-widest">0 / 0</span>
+            </div>
+            <div class="flex flex-col items-end">
+                <span class="text-[8px] font-bold text-slate-500 uppercase">Directive Load</span>
+                <span id="stat-mission" class="text-xs mono font-bold text-white tracking-widest">0 / 0</span>
+            </div>
+            <div class="w-px h-8 bg-white/10"></div>
+            <div class="text-[8px] mono text-sky-500 font-bold bg-sky-500/10 px-2 py-1">SEC_GATEWAY_X88</div>
+        </div>
+    </header>
+
+    <main id="app-body" class="hidden flex-grow grid grid-cols-12 gap-4 overflow-hidden">
+        
+        <div class="col-span-12 lg:col-span-4 flex flex-col gap-4 overflow-hidden">
+            <nav class="flex shrink-0 p-1 bg-slate-900 border border-white/5">
+                <button onclick="tab('reg')" id="btn-reg" class="tab-btn flex-1 py-3 tab-active">Input Log</button>
+                <button onclick="tab('mis')" id="btn-mis" class="tab-btn flex-1 py-3">Directives</button>
+                <button onclick="tab('hub')" id="btn-hub" class="tab-btn flex-1 py-3">Asset Hub</button>
+                <button onclick="tab('mlog')" id="btn-mlog" class="tab-btn flex-1 py-3">Mis. Log</button>
+            </nav>
+
+            <div class="flex-grow overflow-y-auto custom-scroll pr-2 space-y-4">
+                
+                <section id="tab-reg" class="tab-pane space-y-4">
+                    <div class="hud-panel p-6 space-y-6">
+                        <div class="flex justify-between items-center border-b border-white/5 pb-2">
+                            <h2 class="text-[10px] font-black text-sky-500 uppercase tracking-widest">Vessel Commissioning</h2>
+                            <span class="text-[9px] mono text-slate-600">REQ_770</span>
+                        </div>
+                        <div class="space-y-4">
+                            <select id="i-type" class="w-full bg-black/40 border border-slate-800 p-3 text-xs text-white outline-none">
+                                <option value="1">Class: Surface Rover</option>
+                                <option value="2">Class: Orbital Satellite</option>
+                                <option value="3">Class: Deep Space Probe</option>
+                            </select>
+                            <input type="text" id="i-name" placeholder="Vessel Callsign" class="w-full bg-black/40 border border-slate-800 p-3 text-xs text-white uppercase mono outline-none">
+                            <div class="grid grid-cols-2 gap-4">
+                                <input type="number" id="i-id" placeholder="Serial ID" class="w-full bg-black/40 border border-slate-800 p-3 text-xs text-white mono outline-none">
+                                <select id="i-status" class="w-full bg-black/40 border border-slate-800 p-3 text-xs text-white outline-none">
+                                    <option value="STABLE">Stable</option>
+                                    <option value="CRITICAL">Critical</option>
+                                </select>
+                            </div>
+                            <div class="py-2">
+                                <div class="flex justify-between items-center mb-1 text-[8px] font-bold text-slate-500">
+                                    <span>FUEL RESERVOIR</span>
+                                    <span id="fuel-txt" class="text-sky-500">100%</span>
+                                </div>
+                                <input type="range" id="i-fuel" min="0" max="100" value="100" oninput="document.getElementById('fuel-txt').innerText=this.value+'%'" class="w-full h-1 bg-slate-800 appearance-none cursor-pointer accent-sky-500">
+                            </div>
+                            <button onclick="commitVessel()" class="btn-industrial w-full bg-sky-500 hover:bg-sky-400 text-slate-950 font-black py-4 text-[10px] uppercase tracking-widest">Add to Fleet</button>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="tab-mis" class="hidden tab-pane space-y-4">
+                    <div class="hud-panel p-6 space-y-4">
+                        <h2 class="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Directive Assignment</h2>
+                        <input type="text" id="m-name" placeholder="Mission Name" class="w-full bg-black/40 border border-slate-800 p-3 text-xs text-white outline-none">
+                        <div class="grid grid-cols-2 gap-4">
+                            <select id="m-type" class="w-full bg-black/40 border border-slate-800 p-3 text-xs text-white outline-none">
+                                <option value="Exploration">Exploration</option>
+                                <option value="Repair">Repair</option>
+                                <option value="Data Search">Data Search</option>
+                            </select>
+                            <select id="m-prio" class="w-full bg-black/40 border border-slate-800 p-3 text-xs text-white outline-none">
+                                <option value="High">Priority: High</option>
+                                <option value="Med">Priority: Med</option>
+                                <option value="Low">Priority: Low</option>
+                            </select>
+                        </div>
+                        <button onclick="commitMission()" class="btn-industrial w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3 text-[10px] uppercase tracking-widest">Queue Directive</button>
+                    </div>
+                    <div id="m-active-list" class="space-y-2"></div>
+                    <div class="border-t border-white/5 pt-4">
+                        <h3 class="text-[8px] font-black text-slate-500 uppercase mb-2 ml-2 tracking-widest">Resolved Archives</h3>
+                        <div id="m-archive-list" class="space-y-2 opacity-50"></div>
+                    </div>
+                </section>
+
+                <section id="tab-hub" class="hidden tab-pane space-y-2">
+                    <div id="hub-list" class="space-y-3"></div>
+                </section>
+
+                <section id="tab-mlog" class="hidden tab-pane space-y-4">
+                    <div class="hud-panel p-6 border-white/5 space-y-4">
+                        <div class="flex justify-between items-center border-b border-white/5 pb-2">
+                            <h2 class="text-[10px] font-black text-amber-400 uppercase tracking-widest">Mission Log Archive</h2>
+                            <button onclick="clearMissionLog()" class="text-[8px] text-slate-600 hover:text-red-400 uppercase font-bold tracking-widest transition-colors">Purge Log</button>
+                        </div>
+                        <div class="flex gap-3">
+                            <div class="flex-1 hud-panel p-3 border-white/5 text-center">
+                                <div class="text-[8px] text-slate-500 uppercase mb-1">Total Executed</div>
+                                <div id="log-total" class="mono text-lg font-black text-white">0</div>
+                            </div>
+                            <div class="flex-1 hud-panel p-3 border-white/5 text-center">
+                                <div class="text-[8px] text-slate-500 uppercase mb-1">High Priority</div>
+                                <div id="log-high" class="mono text-lg font-black text-red-400">0</div>
+                            </div>
+                            <div class="flex-1 hud-panel p-3 border-white/5 text-center">
+                                <div class="text-[8px] text-slate-500 uppercase mb-1">Low Priority</div>
+                                <div id="log-low" class="mono text-lg font-black text-slate-400">0</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="mission-log-list" class="space-y-2">
+                        <div class="text-[9px] mono text-slate-600 text-center py-6 tracking-widest">NO LOG ENTRIES YET</div>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <div class="col-span-12 lg:col-span-8 flex flex-col gap-4 overflow-hidden">
+            
+            <div class="grid grid-cols-3 gap-4 shrink-0">
+                <div class="hud-panel p-4 flex flex-col border-white/5">
+                    <span class="text-[8px] font-bold text-slate-500 uppercase mb-1">Encryption</span>
+                    <span class="text-[10px] mono text-sky-400">AES-256 ACTIVE</span>
+                </div>
+                <div class="hud-panel p-4 flex flex-col border-white/5">
+                    <span class="text-[8px] font-bold text-slate-500 uppercase mb-1">Latency</span>
+                    <span class="text-[10px] mono text-emerald-500">14ms // UPLINK_FAST</span>
+                </div>
+                <div class="hud-panel p-4 flex flex-col border-white/5">
+                    <span class="text-[8px] font-bold text-slate-500 uppercase mb-1">Power</span>
+                    <span class="text-[10px] mono text-white">GRID_NOMINAL</span>
+                </div>
+            </div>
+
+            <div class="flex-grow grid grid-cols-1 md:grid-cols-2 gap-4 overflow-hidden">
+                <div class="hud-panel flex flex-col overflow-hidden border-white/5">
+                    <div class="h-10 flex items-center justify-between px-6 bg-slate-900/80 border-b border-white/5">
+                        <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Live Telemetry Buffer</span>
+                        <button onclick="flushLogs()" class="text-[8px] text-slate-600 hover:text-white uppercase font-bold">Flush</button>
+                    </div>
+                    <div id="term-out" class="p-6 overflow-y-auto flex-grow custom-scroll mono text-[11px] leading-loose">
+                        <div class="text-slate-600">>> INITIALIZING_STATION_UPLINK...</div>
+                    </div>
+                </div>
+
+                <div class="hud-panel flex flex-col overflow-hidden border-white/5">
+                    <div class="h-10 flex items-center justify-between px-6 bg-slate-900/80 border-b border-white/5">
+                        <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Sector Tactical Radar</span>
+                        <span id="radar-status" class="text-[8px] mono text-emerald-500 animate-pulse">● SCANNING</span>
+                    </div>
+                    <div class="flex-grow relative bg-black/60 overflow-hidden" id="radar-screen">
+                        <!-- SVG Radar Base -->
+                        <svg class="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid meet">
+                            <!-- Concentric rings -->
+                            <circle cx="150" cy="150" r="40"  fill="none" stroke="rgba(56,189,248,0.12)" stroke-width="1"/>
+                            <circle cx="150" cy="150" r="80"  fill="none" stroke="rgba(56,189,248,0.10)" stroke-width="1"/>
+                            <circle cx="150" cy="150" r="120" fill="none" stroke="rgba(56,189,248,0.08)" stroke-width="1"/>
+                            <circle cx="150" cy="150" r="145" fill="none" stroke="rgba(56,189,248,0.06)" stroke-width="1"/>
+                            <!-- Crosshair lines -->
+                            <line x1="150" y1="5"   x2="150" y2="295" stroke="rgba(56,189,248,0.08)" stroke-width="1"/>
+                            <line x1="5"   y1="150" x2="295" y2="150" stroke="rgba(56,189,248,0.08)" stroke-width="1"/>
+                            <!-- Diagonal grid -->
+                            <line x1="150" y1="5"   x2="150" y2="295" stroke="rgba(56,189,248,0.04)" stroke-width="1" transform="rotate(45 150 150)"/>
+                            <line x1="150" y1="5"   x2="150" y2="295" stroke="rgba(56,189,248,0.04)" stroke-width="1" transform="rotate(-45 150 150)"/>
+                            <!-- Range labels -->
+                            <text x="155" y="115" fill="rgba(56,189,248,0.3)" font-size="6" font-family="monospace">40km</text>
+                            <text x="155" y="75"  fill="rgba(56,189,248,0.3)" font-size="6" font-family="monospace">80km</text>
+                            <text x="155" y="34"  fill="rgba(56,189,248,0.3)" font-size="6" font-family="monospace">120km</text>
+                            <!-- Cardinal labels -->
+                            <text x="146" y="18"  fill="rgba(56,189,248,0.4)" font-size="7" font-family="monospace" font-weight="bold">N</text>
+                            <text x="146" y="292" fill="rgba(56,189,248,0.4)" font-size="7" font-family="monospace" font-weight="bold">S</text>
+                            <text x="6"   y="154" fill="rgba(56,189,248,0.4)" font-size="7" font-family="monospace" font-weight="bold">W</text>
+                            <text x="286" y="154" fill="rgba(56,189,248,0.4)" font-size="7" font-family="monospace" font-weight="bold">E</text>
+                            <!-- Sweep cone gradient -->
+                            <defs>
+                                <radialGradient id="sweepGrad" cx="50%" cy="50%" r="50%">
+                                    <stop offset="0%"   stop-color="rgba(56,189,248,0.18)"/>
+                                    <stop offset="100%" stop-color="rgba(56,189,248,0)"/>
+                                </radialGradient>
+                            </defs>
+                            <path id="radar-sweep-path" d="M150,150 L150,10 A140,140 0 0,1 220,60 Z" fill="url(#sweepGrad)">
+                                <animateTransform attributeName="transform" type="rotate" from="0 150 150" to="360 150 150" dur="4s" repeatCount="indefinite"/>
+                            </path>
+                            <!-- Sweep leading edge line -->
+                            <line x1="150" y1="150" x2="150" y2="10" stroke="rgba(56,189,248,0.6)" stroke-width="1.2">
+                                <animateTransform attributeName="transform" type="rotate" from="0 150 150" to="360 150 150" dur="4s" repeatCount="indefinite"/>
+                            </line>
+                        </svg>
+                        <div id="radar-points" class="relative w-full h-full"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modified Action Section to include Refill -->
+            <div class="hud-panel p-6 flex flex-col md:flex-row items-center gap-4 border-white/5 bg-gradient-to-r from-sky-500/5 to-transparent">
+                <div class="flex-grow">
+                    <h3 class="text-[10px] font-black text-sky-500 uppercase tracking-[0.3em] mb-1">Intelligent Assignment Core</h3>
+                    <p class="text-xs text-slate-400 font-medium">Auto-distributes directives based on class requirements and fuel levels.</p>
+                </div>
+                <div class="flex gap-3 w-full md:w-auto">
+                    <button onclick="fleetRefill()" class="btn-industrial px-6 py-5 bg-white/5 border border-white/10 hover:bg-emerald-500/10 text-emerald-500 font-black text-[10px] uppercase tracking-widest">
+                        Refuel Fleet
+                    </button>
+                    <button onclick="runAssignment()" class="btn-industrial px-12 py-5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs uppercase tracking-[0.4em] shadow-xl shadow-sky-500/10">
+                        Execute Auto-Sync
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let hangarSize = 0, bufferSize = 0, fleet = [], queue = [];
+        let missionLogs = []; // mirrors C++ vector<string> logs
+
+        function addMissionLog(entry) {
+            missionLogs.push({ text: entry, time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false}) });
+            renderMissionLog();
+        }
+
+        function clearMissionLog() {
+            missionLogs = [];
+            renderMissionLog();
+        }
+
+        function renderMissionLog() {
+            const list = document.getElementById('mission-log-list');
+            const total = document.getElementById('log-total');
+            const highEl = document.getElementById('log-high');
+            const lowEl  = document.getElementById('log-low');
+            if (!list) return;
+
+            const completed = missionLogs.filter(l => l.text.includes('completed'));
+            const highCount = completed.filter(l => l.text.includes('Priority: High')).length;
+            const lowCount  = completed.filter(l => l.text.includes('Priority: Low')).length;
+
+            total.innerText  = completed.length;
+            highEl.innerText = highCount;
+            lowEl.innerText  = lowCount;
+
+            if (missionLogs.length === 0) {
+                list.innerHTML = '<div class="text-[9px] mono text-slate-600 text-center py-6 tracking-widest">NO LOG ENTRIES YET</div>';
+                return;
+            }
+
+            list.innerHTML = '';
+            [...missionLogs].reverse().forEach((log, i) => {
+                const isCompleted = log.text.includes('completed');
+                const isRefuel    = log.text.includes('refueled') || log.text.includes('REFUELED');
+                const isHigh      = log.text.includes('Priority: High');
+                const isMed       = log.text.includes('Priority: Med');
+
+                const accentColor = isRefuel    ? 'border-l-emerald-500' :
+                                    isHigh      ? 'border-l-red-500'     :
+                                    isMed       ? 'border-l-amber-400'   :
+                                                  'border-l-slate-600';
+                const badgeColor  = isRefuel    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                                    isCompleted ? 'bg-sky-500/10 text-sky-400 border-sky-500/20'             :
+                                                  'bg-slate-500/10 text-slate-400 border-slate-500/20';
+                const badge       = isRefuel ? 'SYS' : isCompleted ? 'OK' : 'INFO';
+
+                list.innerHTML += `
+                    <div class="hud-panel p-3 border-l-2 ${accentColor} border-white/5">
+                        <div class="flex justify-between items-start gap-2">
+                            <div class="flex-grow">
+                                <div class="text-[9px] text-slate-300 leading-relaxed">${log.text}</div>
+                                <div class="text-[7px] mono text-slate-600 mt-1">${log.time}</div>
+                            </div>
+                            <span class="shrink-0 text-[7px] px-2 py-0.5 font-bold uppercase border ${badgeColor}">${badge}</span>
+                        </div>
+                    </div>`;
+            });
+        }
+
+        // UI Initialization
+        function initBackground() {
+            const container = document.getElementById('starfield');
+            for (let i = 0; i < 150; i++) {
+                const s = document.createElement('div');
+                s.className = 'star';
+                const size = (Math.random() * 2 + 1) + 'px';
+                s.style.width = size; s.style.height = size;
+                s.style.left = Math.random() * 100 + '%';
+                s.style.top = Math.random() * 100 + '%';
+                s.style.setProperty('--d', (Math.random() * 40 + 20) + 's');
+                container.appendChild(s);
+            }
+        }
+        initBackground();
+
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('live-clock').textContent = `SYST_TIME: ${now.toUTCString().split(' ')[4]} // STARDATE: 2026.${Math.floor(now.getMonth()*2.5)}`;
+        }, 1000);
+
+        function initializeStation() {
+            hangarSize = parseInt(document.getElementById('sCap').value);
+            bufferSize = parseInt(document.getElementById('mCap').value);
+            if (isNaN(hangarSize) || isNaN(bufferSize)) return;
+
+            document.getElementById('boot-overlay').style.display = 'none';
+            document.getElementById('app-body').classList.remove('hidden');
+            
+            postLog("NEBULA STATION UPLINK ESTABLISHED", "#38bdf8");
+            postLog(`Hangar: ${hangarSize} // Queue Buffer: ${bufferSize}`);
+            renderUI();
+        }
+
+        function tab(t) {
+            document.querySelectorAll('.tab-pane').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('tab-active'));
+            document.getElementById('tab-' + t).classList.remove('hidden');
+            document.getElementById('btn-' + t).classList.add('tab-active');
+        }
+
+        function postLog(msg, color = "#64748b") {
+            const out = document.getElementById('term-out');
+            const div = document.createElement('div');
+            const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false});
+            
+            if (msg.includes("FAIL")) div.className = "text-red-500 font-bold border-l-2 border-red-500/50 pl-3";
+            else if (msg.includes("SUCCESS")) div.className = "text-emerald-400 font-bold ml-6";
+            else if (msg.includes("Assignment")) div.className = "text-sky-400 font-black tracking-widest mt-4 uppercase pb-1 border-b border-sky-500/10";
+            else div.style.color = color;
+
+            div.innerHTML = `<span class="opacity-20 mr-4 font-normal text-[9px] mono">${time}</span> ${msg}`;
+            out.appendChild(div);
+            out.scrollTop = out.scrollHeight;
+        }
+
+        function commitVessel() {
+            if (fleet.length >= hangarSize) return postLog("FAIL: Hangar capacity saturated.", "#ef4444");
+            const name = document.getElementById('i-name').value || `UNIT-X${Math.floor(Math.random()*999)}`;
+            const id = document.getElementById('i-id').value || "0000";
+            const fuel = parseInt(document.getElementById('i-fuel').value);
+            const status = document.getElementById('i-status').value;
+            const typeCode = document.getElementById('i-type').value;
+
+            const types = ["", "ROVER", "SATELLITE", "PROBE"];
+            fleet.push({ 
+                name: name.toUpperCase(), id, fuel, status, 
+                type: types[typeCode],
+                pos: { x: Math.random() * 80 + 10, y: Math.random() * 80 + 10 },
+                onCooldown: false
+            });
+
+            postLog(`COMMISSION: Asset ${name.toUpperCase()} (ID: ${id}) added to hangar.`);
+            document.getElementById('i-name').value = "";
+            renderUI();
+        }
+
+        function commitMission() {
+            const name = document.getElementById('m-name').value || "OP_DELTA";
+            const type = document.getElementById('m-type').value;
+            const prio = document.getElementById('m-prio').value;
+
+            if (queue.length >= bufferSize) return postLog("FAIL: Directive buffer full.", "#ef4444");
+
+            queue.push({ 
+                name: name.toUpperCase(), 
+                type: type, 
+                prio, 
+                done: false 
+            });
+
+            postLog(`DIRECTIVE: Mission [${name.toUpperCase()}] broadcast to sector.`, "#10b981");
+            document.getElementById('m-name').value = "";
+            renderUI();
+        }
+
+        function fleetRefill() {
+            fleet.forEach(f => {
+                f.fuel = 100;
+                f.status = 'STABLE';
+                f.onCooldown = false;
+            });
+            postLog("SYSTEM_ACTION: FLEET REFUELED AND STATUS NORMALIZED", "#10b981");
+            addMissionLog("Fleet refueled to 100% and damaged spacecrafts have been repaired!!");
+            renderUI();
+        }
+
+        function showSecretReport(idx) {
+            const s = fleet[idx];
+            const content = document.getElementById('report-content');
+            content.innerHTML = `
+                <div class="flex justify-between border-b border-white/5 pb-1"><span>VESSEL CALLSIGN</span><span class="text-white">${s.name}</span></div>
+                <div class="flex justify-between border-b border-white/5 pb-1"><span>REGISTRY ID</span><span class="text-white">${s.id}</span></div>
+                <div class="flex justify-between border-b border-white/5 pb-1"><span>ASSET CLASS</span><span class="text-white">${s.type}</span></div>
+                <div class="flex justify-between border-b border-white/5 pb-1"><span>POWER LEVEL</span><span class="text-sky-400">${s.fuel}%</span></div>
+                <div class="flex justify-between border-b border-white/5 pb-1"><span>OPERATIONAL STATUS</span><span class="${s.status === 'CRITICAL' ? 'text-red-500' : 'text-emerald-500'}">${s.status}</span></div>
+                <div class="flex justify-between"><span>UPLINK SYNC</span><span class="text-white">${s.onCooldown ? 'STANDBY' : 'READY'}</span></div>
+                <div class="mt-4 p-3 bg-black/40 text-[9px] italic text-slate-500">
+                    Proprietary sensor data indicates this vessel is currently maintaining deep space communications within Sector-7G.
+                </div>
+            `;
+            document.getElementById('secret-modal').classList.remove('hidden');
+        }
+
+        function runAssignment() {
+            postLog("Assignment Protocol Initiated", "#38bdf8");
+            const activeMissions = queue.filter(m => !m.done);
+            if (activeMissions.length === 0) return postLog("INFO: No pending directives found.");
+
+            // Sort by priority logic (High -> Med -> Low)
+            const priorities = ["High", "Med", "Low"];
+            
+            priorities.forEach(prio => {
+                const filtered = activeMissions.filter(m => m.prio === prio);
+                filtered.forEach(m => {
+                    postLog(`Evaluating Directive: ${m.name} (${m.prio})`);
+                    
+                    let match = fleet.find(f => {
+                        const canHandle = (m.type === "Exploration" && f.type === "ROVER") ||
+                                          (m.type === "Repair" && f.type === "SATELLITE") ||
+                                          (m.type === "Data Search" && f.type === "PROBE");
+                        
+                        return canHandle && f.fuel >= 20 && f.status !== 'CRITICAL' && !f.onCooldown;
+                    });
+
+                    if (match) {
+                        postLog(`SUCCESS: Syncing ${m.name} with ${match.name}`, "#10b981");
+                        m.done = true;
+                        
+                        // C++ Depletion Logic
+                        const drain = match.type === 'SATELLITE' ? 20 : 15;
+                        match.fuel = Math.max(0, match.fuel - drain);
+                        if (match.fuel < 20) match.status = 'CRITICAL';
+                        
+                        match.onCooldown = true;
+                        // Mirror C++ addLog call
+                        addMissionLog(`Craft ${match.name} completed mission: ${m.name} (Priority: ${m.prio})`);
+                    } else {
+                        postLog(`FAIL: No suitable asset for ${m.name}`, "#ef4444");
+                        addMissionLog(`No suitable craft found for mission: ${m.name} (Priority: ${m.prio})`);
+                    }
+                });
+            });
+
+            setTimeout(() => {
+                fleet.forEach(f => f.onCooldown = false);
+                renderUI();
+            }, 3000);
+
+            renderUI();
+        }
+
+        function renderUI() {
+            document.getElementById('stat-fleet').innerText = `${fleet.length} / ${hangarSize}`;
+            document.getElementById('stat-mission').innerText = `${queue.filter(m=>!m.done).length} / ${bufferSize}`;
+
+            const mList = document.getElementById('m-active-list');
+            const aList = document.getElementById('m-archive-list');
+            const hList = document.getElementById('hub-list');
+            const rPoints = document.getElementById('radar-points');
+
+            mList.innerHTML = ""; aList.innerHTML = ""; hList.innerHTML = ""; rPoints.innerHTML = "";
+
+            queue.forEach(m => {
+                const html = `
+                    <div class="hud-panel p-3 border-l-2 ${m.done ? 'border-l-slate-700 opacity-40' : (m.prio === 'High' ? 'border-l-red-500' : 'border-l-sky-500')}">
+                        <div class="flex justify-between items-center text-[9px] font-black">
+                            <div class="flex flex-col">
+                                <span class="text-white">${m.name}</span>
+                                <span class="text-slate-500 text-[7px] uppercase">${m.type} // ${m.prio}</span>
+                            </div>
+                            <span class="${m.done ? 'text-emerald-500' : 'text-slate-600 animate-pulse'}">${m.done ? 'ARCHIVED' : 'ACTIVE'}</span>
+                        </div>
+                    </div>
+                `;
+                if (m.done) aList.innerHTML += html;
+                else mList.innerHTML += html;
+            });
+
+            fleet.forEach((c, i) => {
+                const isCrit = c.status === 'CRITICAL' || c.fuel < 20;
+                hList.innerHTML += `
+                    <div class="sc-card p-4 hud-panel border-white/5 cursor-pointer" onclick="showSecretReport(${i})">
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <h4 class="text-[9px] font-black text-white italic tracking-widest">${c.name}</h4>
+                                <span class="text-[7px] mono text-slate-600 uppercase tracking-widest">${c.type} // ID:${c.id}</span>
+                            </div>
+                            <span class="text-[7px] px-2 py-0.5 font-bold uppercase ${isCrit ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'}">${c.status}</span>
+                        </div>
+                        <div class="h-1 bg-slate-900 rounded-full mb-1">
+                            <div class="h-full bg-sky-500 shadow-[0_0_5px_#0ea5e9] transition-all duration-1000" style="width: ${c.fuel}%"></div>
+                        </div>
+                        <div class="flex justify-between text-[7px] font-bold text-slate-500 mono">
+                            <span>PWR_LVL</span><span>${c.fuel}%</span>
+                        </div>
+                    </div>
+                `;
+
+                rPoints.innerHTML += `
+                    <div class="absolute group cursor-help" style="top: ${c.pos.y}%; left: ${c.pos.x}%;">
+                        <div class="w-1.5 h-1.5 rounded-full ${isCrit ? 'bg-red-500 animate-ping' : 'bg-sky-500 animate-pulse'}"></div>
+                        <div class="absolute top-4 left-1/2 -translate-x-1/2 bg-black border border-white/10 p-1 rounded text-[6px] mono text-white opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50">
+                            ${c.name} // FUEL: ${c.fuel}%
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function flushLogs() {
+            document.getElementById('term-out').innerHTML = '<div class="text-slate-600">>> BUFFER_PURGED. READY.</div>';
+        }
+    </script>
+</body>
+</html>
